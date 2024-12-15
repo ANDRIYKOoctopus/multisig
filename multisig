@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MultiSigWallet {
+    address[] public owners;
+    uint public requiredSignatures;
+    mapping(address => bool) public isOwner;
+    mapping(uint => Transaction) public transactions;
+    uint public transactionCount;
+
+    struct Transaction {
+        address to;
+        uint256 amount;
+        uint256 signatureCount;
+        mapping(address => bool) signedBy;
+        bool executed;
+    }
+
+    modifier onlyOwner() {
+        require(isOwner[msg.sender], "Not an owner");
+        _;
+    }
+
+    modifier notExecuted(uint transactionId) {
+        require(!transactions[transactionId].executed, "Transaction already executed");
+        _;
+    }
+
+    constructor(address[] memory _owners, uint _requiredSignatures) {
+        require(_owners.length > 1, "At least two owners required");
+        owners = _owners;
+        requiredSignatures = _requiredSignatures;
+        for (uint i = 0; i < _owners.length; i++) {
+            isOwner[_owners[i]] = true;
+        }
+    }
+
+    function createTransaction(address to, uint256 amount) public onlyOwner {
+        transactionCount++;
+        Transaction storage t = transactions[transactionCount];
+        t.to = to;
+        t.amount = amount;
+        t.signatureCount = 0;
+        t.executed = false;
+    }
+
+    function signTransaction(uint transactionId) public onlyOwner notExecuted(transactionId) {
+        Transaction storage t = transactions[transactionId];
+        require(!t.signedBy[msg.sender], "Already signed");
+        t.signedBy[msg.sender] = true;
+        t.signatureCount++;
+        if (t.signatureCount >= requiredSignatures) {
+            t.executed = true;
+            payable(t.to).transfer(t.amount);
+        }
+    }
+
+    receive() external payable {}
+}
